@@ -1,0 +1,25 @@
+# Qdrant Configuration File
+# Copy this file and modify the values as needed
+
+# Qdrant connection settings
+qdrant_host: https://75f5cc60-af58-46dd-8e92-16ff874b8b8c.us-east4-0.gcp.cloud.qdrant.io
+qdrant_port: 6333
+qdrant_api_key: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJhY2Nlc3MiOiJtIn0.RQmW_5jzMpwqbws5PnYFwW7hh0FFW6AejFLKNNHYfAs  # Set your API key if using cloud or secured instance
+
+# Collection settings
+collection_name: cbt_documents
+recreate_collection: true  # Set to true to delete and recreate existing collection
+
+# Embedding model settings
+embedding_model: text-embedding-3-small  # OpenAI's efficient embedding model, 1536 dimensions
+# Alternative OpenAI models:
+# - text-embedding-3-small (1536d, efficient, good quality)
+# - text-embedding-3-large (3072d, slower, higher quality)
+# - text-embedding-ada-002 (1536d, legacy model)
+
+# Upload settings
+batch_size: 100  # Number of documents to process in each batch
+
+# Advanced settings (usually don't need to change)
+vector_size: 1536  # OpenAI text-embedding-3-small uses 1536 dimensions
+
