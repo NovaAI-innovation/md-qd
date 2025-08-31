@@ -1,71 +1,79 @@
 ```python
-from typing import Optional
+from typing import Annotated
 
-from fastapi import APIRouter, HTTPException, status, Depends
+from fastapi import APIRouter, Depends, HTTPException, Path, status
 from pydantic import BaseModel, Field
 
-from api.dependencies import get_user_service
-from services.users import UserService
+from core.database import get_db
+from core.models import User  # Assuming you have a User model
+from sqlalchemy.orm import Session
 
-router = APIRouter(prefix="/users", tags=["users"])
+router = APIRouter(
+    prefix="/users",
+    tags=["users"],
+    responses={404: {"description": "Not found"}},
+)
 
 
 class UserUpdate(BaseModel):
     """
     Represents the data required to update a user.
     """
-    first_name: Optional[str] = Field(default=None, title="First Name", max_length=50)
-    last_name: Optional[str] = Field(default=None, title="Last Name", max_length=50)
-    email: Optional[str] = Field(default=None, title="Email Address")
-    is_active: Optional[bool] = Field(default=None, title="Active Status")
 
-    @classmethod
-    def validate(cls, values: dict):
-        """
-        Validates the user update data.  Ensures at least one field is being updated.
-        """
-        if not any(values.values()):
-            raise ValueError("At least one field must be provided for update.")
-        return values
+    username: str | None = Field(default=None, max_length=50, example="new_username")
+    email: str | None = Field(default=None, example="new_email@example.com")
+    full_name: str | None = Field(default=None, max_length=100, example="New Full Name")
+    disabled: bool | None = Field(default=None, example=False)
 
 
-@router.patch("/{user_id}", response_model=None, status_code=status.HTTP_200_OK)
+@router.patch(
+    "/{user_id}",
+    response_model=User,
+    summary="Update a user",
+    description="Updates an existing user with the provided information.",
+    response_description="The updated user.",
+)
 async def update_user(
-    user_id: int,
-    user_data: UserUpdate,
-    user_service: UserService = Depends(get_user_service),
-) -> dict:
+    user_id: Annotated[int, Path(title="The ID of the user to update")],
+    user_update: UserUpdate,
+    db: Session = Depends(get_db),
+):
     """
-    Updates an existing user.
+    Updates an existing user in the database.
 
     Args:
         user_id (int): The ID of the user to update.
-        user_data (UserUpdate): The data to update the user with.
-        user_service (UserService): The user service dependency.
+        user_update (UserUpdate): The data to update the user with.
+        db (Session): The database session.
 
     Returns:
-        dict: A message indicating the successful update.
+        User: The updated user object.
 
     Raises:
         HTTPException:
-            - 404 if the user is not found.
-            - 400 if the provided data is invalid.
-            - 500 for any unexpected server errors.
+            - 404: If the user with the given ID is not found.
+            - 400: If the update fails due to data validation errors or other issues.
     """
-    try:
-        updated = await user_service.update_user(user_id, user_data.dict(exclude_unset=True))
-        if not updated:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND, detail="User not found"
-            )
-        return {"message": f"User with id {user_id} updated successfully"}
-    except ValueError as ve:
+    db_user = db.query(User).filter(User.id == user_id).first()
+    if db_user is None:
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail=str(ve)
+            status_code=status.HTTP_404_NOT_FOUND, detail="User not found"
         )
+
+    # Update the user object with the provided data
+    update_data = user_update.dict(exclude_unset=True)
+    for key, value in update_data.items():
+        setattr(db_user, key, value)
+
+    try:
+        db.add(db_user)
+        db.commit()
+        db.refresh(db_user)
+        return db_user
     except Exception as e:
+        db.rollback()
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Failed to update user: {str(e)}",
         )
 ```
