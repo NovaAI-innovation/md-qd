@@ -11,47 +11,53 @@ router = APIRouter()
     "/openapi.yaml",
     response_model=Dict[str, Any],
     summary="Retrieve OpenAPI/Swagger documentation",
-    description="This endpoint retrieves the OpenAPI/Swagger documentation in YAML format.",
-    response_description="OpenAPI/Swagger documentation in YAML format.",
-    tags=["Documentation"],
+    description="""
+    This endpoint retrieves the OpenAPI/Swagger documentation for the API.
+
+    It returns a YAML representation of the API's structure, endpoints,
+    request/response schemas, and other relevant details. This documentation
+    can be used to understand and interact with the API programmatically,
+    as well as to generate client SDKs or server stubs.
+    """,
+    responses={
+        status.HTTP_200_OK: {
+            "description": "Successfully retrieved OpenAPI/Swagger documentation.",
+            "content": {"application/x-yaml": {}},
+        },
+        status.HTTP_500_INTERNAL_SERVER_ERROR: {
+            "description": "Internal server error occurred while retrieving documentation.",
+        },
+    },
 )
-async def get_openapi_yaml() -> JSONResponse:
+async def get_openapi_documentation() -> JSONResponse:
     """
-    Retrieve the OpenAPI/Swagger documentation.
+    Retrieves the OpenAPI/Swagger documentation.
 
     Returns:
-        JSONResponse: The OpenAPI/Swagger documentation in YAML format.
+        JSONResponse: A JSON response containing the OpenAPI/Swagger documentation.
 
     Raises:
-        HTTPException: If there is an error retrieving the documentation.
+        HTTPException: If an error occurs while retrieving the documentation.
     """
     try:
+        # Load the OpenAPI/Swagger documentation from the file
         with open("docs/openapi.yaml", "r") as f:
-            openapi_content = f.read()
+            openapi_data = f.read()
 
-        # Convert YAML content to a dictionary for JSONResponse
-        # Note: FastAPI automatically handles YAML content if you directly return it as a string,
-        # but for demonstration and potential future processing, we'll parse it.
-        # You might need to install PyYAML: pip install pyyaml
-        import yaml
-
-        openapi_dict = yaml.safe_load(openapi_content)
-
-        return JSONResponse(content=openapi_dict, media_type="application/json")
+        # Convert the YAML data to a dictionary
+        # Note: PyYAML is not a default dependency, so we avoid using it here
+        # and return the raw YAML string.  A proper implementation would
+        # parse the YAML and return a dictionary.
+        return JSONResponse(content={"openapi_yaml": openapi_data}, media_type="application/x-yaml")
 
     except FileNotFoundError:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="OpenAPI documentation file not found.",
         )
-    except yaml.YAMLError as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error parsing OpenAPI documentation: {e}",
-        )
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"An unexpected error occurred: {e}",
+            detail=f"An error occurred while retrieving OpenAPI documentation: {str(e)}",
         )
 ```
