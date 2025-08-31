@@ -4,10 +4,11 @@ from typing import Optional
 from fastapi import APIRouter, HTTPException, status, Depends
 from pydantic import BaseModel, Field
 
-from api.dependencies import get_user_service
-from services.users import UserService
+from core.users import update_user, get_user
+from db.session import get_db
+from sqlalchemy.orm import Session
 
-router = APIRouter(prefix="/users", tags=["users"])
+router = APIRouter()
 
 
 class UserUpdate(BaseModel):
@@ -16,56 +17,67 @@ class UserUpdate(BaseModel):
     """
     first_name: Optional[str] = Field(default=None, title="First Name", max_length=50)
     last_name: Optional[str] = Field(default=None, title="Last Name", max_length=50)
-    email: Optional[str] = Field(default=None, title="Email Address")
-    is_active: Optional[bool] = Field(default=None, title="Active Status")
+    email: Optional[str] = Field(default=None, title="Email", max_length=100)
+    is_active: Optional[bool] = Field(default=None, title="Is Active")
 
-    @classmethod
-    def validate(cls, values: dict):
+    class Config:
         """
-        Validates the user update data.  Ensures at least one field is being updated.
+        Pydantic config
         """
-        if not any(values.values()):
-            raise ValueError("At least one field must be provided for update.")
-        return values
+        orm_mode = True
+        schema_extra = {
+            "example": {
+                "first_name": "John",
+                "last_name": "Doe",
+                "email": "john.doe@example.com",
+                "is_active": True
+            }
+        }
 
 
-@router.patch("/{user_id}", response_model=None, status_code=status.HTTP_200_OK)
-async def update_user(
-    user_id: int,
-    user_data: UserUpdate,
-    user_service: UserService = Depends(get_user_service),
-) -> dict:
+@router.put("/{user_id}", response_model=None,
+            summary="Update a user by ID",
+            description="Updates an existing user with the provided information.",
+            response_description="The updated user information.")
+def update_user_endpoint(user_id: int, user_update: UserUpdate, db: Session = Depends(get_db)):
     """
-    Updates an existing user.
+    Updates a user in the database.
 
     Args:
         user_id (int): The ID of the user to update.
-        user_data (UserUpdate): The data to update the user with.
-        user_service (UserService): The user service dependency.
+        user_update (UserUpdate): The data to update the user with.
+        db (Session): The database session.
 
     Returns:
-        dict: A message indicating the successful update.
+        dict: A message indicating the update was successful.
 
     Raises:
         HTTPException:
             - 404 if the user is not found.
-            - 400 if the provided data is invalid.
-            - 500 for any unexpected server errors.
+            - 500 for any other error during the update process.
     """
     try:
-        updated = await user_service.update_user(user_id, user_data.dict(exclude_unset=True))
-        if not updated:
+        # Check if the user exists
+        existing_user = get_user(db, user_id)
+        if not existing_user:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+
+        # Update the user
+        updated_user = update_user(db, user_id, user_update.dict(exclude_unset=True))
+
+        if not updated_user:
             raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND, detail="User not found"
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to update user"
             )
-        return {"message": f"User with id {user_id} updated successfully"}
-    except ValueError as ve:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail=str(ve)
-        )
+
+        return {"message": f"User with id {user_id} updated successfully."}
+
+    except HTTPException as http_exc:
+        raise http_exc
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to update user: {str(e)}",
+            detail=f"An unexpected error occurred: {str(e)}"
         )
 ```
